@@ -1,0 +1,67 @@
+-- Optional seed data for development. Run after migrations.
+-- In Supabase: run this in SQL Editor after 20260318120000_gameon_public_views.sql
+
+INSERT INTO public.organizations (id, name, slug)
+VALUES
+  ('a0000000-0000-0000-0000-000000000001', 'GameOn Demo', 'gameon-demo')
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO public.tournaments (id, organization_id, name, slug, sport, location, status, start_date, end_date, is_featured, is_registration_open)
+VALUES
+  ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Summer Cup 2026', 'summer-cup-2026', 'Football', 'Malé', 'ongoing', '2026-06-01', '2026-06-30', true, true),
+  ('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'Island League', 'island-league', 'Volleyball', 'Hulhumalé', 'upcoming', '2026-07-01', '2026-08-15', false, true),
+  ('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'Inter-Office League', 'inter-office', 'Football', 'Office', 'ongoing', '2026-03-01', '2026-03-31', true, true)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.teams (id, name, slug, logo_url)
+VALUES
+  ('c0000000-0000-0000-0000-000000000001', 'Eagles', 'eagles', null),
+  ('c0000000-0000-0000-0000-000000000002', 'Sharks', 'sharks', null),
+  ('c0000000-0000-0000-0000-000000000003', 'Waves', 'waves', null)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.team_entries (tournament_id, team_id, status)
+VALUES
+  ('b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'approved'),
+  ('b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000002', 'approved'),
+  ('b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000003', 'approved'),
+  ('b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000001', 'approved'),
+  ('b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000002', 'approved'),
+  ('b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000003', 'approved')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.matches (id, tournament_id, home_team_id, away_team_id, home_score, away_score, status, scheduled_at, round_label, live_minute)
+VALUES
+  ('d0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000002', 2, 1, 'ft', now() - interval '1 day', 'Matchday 1', null),
+  ('d0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000001', null, null, 'scheduled', now() + interval '2 hours', 'Matchday 2', null),
+  ('d0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000002', 1, 0, 'ft', now() - interval '2 days', 'Round 1', null),
+  ('d0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000001', 2, 2, 'ft', now() - interval '1 day', 'Round 2', null)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.players (id, team_id, name, position)
+VALUES
+  ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'Ali Hassan', 'Forward'),
+  ('e0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000002', 'Ahmed Mohamed', 'Midfielder')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.match_events (match_id, player_id, event_type, minute)
+VALUES
+  ('d0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'goal', 23),
+  ('d0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'goal', 67),
+  ('d0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000002', 'goal', 45)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.standings_cache (tournament_id, team_id, rank, points, played)
+VALUES
+  ('b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 1, 3, 1),
+  ('b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000002', 2, 0, 1),
+  ('b0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000003', 3, 0, 0),
+  ('b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000001', 1, 4, 2),
+  ('b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000003', 2, 1, 2),
+  ('b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000002', 3, 0, 2)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.media_assets (tournament_id, title, type, is_live, duration)
+VALUES
+  ('b0000000-0000-0000-0000-000000000001', 'Summer Cup - Matchday 1 Highlights', 'highlight', false, '5:30')
+ON CONFLICT DO NOTHING;
