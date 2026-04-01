@@ -19,6 +19,7 @@ export interface Database {
       matches: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       players: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       match_events: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
+      match_lineups: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       standings_cache: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       media_assets: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       profiles: {

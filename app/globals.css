@@ -15,3 +15,29 @@ body {
       transparent 55%
     );
 }
+
+@keyframes hero-photo-slide-fade {
+  0% {
+    opacity: 1;
+  }
+  28% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.hero-photo-slide {
+  opacity: 0;
+  animation-name: hero-photo-slide-fade;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.hero-photo-slide--first {
+  opacity: 1;
+}

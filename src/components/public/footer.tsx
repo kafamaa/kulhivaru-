@@ -14,13 +14,13 @@ export function Footer() {
       <div className="mx-auto max-w-7xl px-4 py-8">
         <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-slate-50 hover:text-slate-100">
-            <span className="relative h-8 w-[104px] overflow-hidden rounded-md border border-white/10 bg-slate-900/60">
+            <span className="relative h-8 w-[104px] overflow-hidden">
               <Image
                 src="/kulhivaru-logo.png"
                 alt=""
                 fill
                 sizes="104px"
-                className="object-contain object-center p-0.5"
+                className="object-contain object-center"
               />
             </span>
             Kulhivaru+

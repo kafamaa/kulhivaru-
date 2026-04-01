@@ -107,6 +107,15 @@ async function HomePageData() {
       duration: h.duration ?? undefined,
       tournamentName: h.tournamentName ?? undefined,
     })),
+    heroTournamentPhotos: [...ongoing, ...upcoming]
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        imageUrl: t.coverImageUrl ?? t.logoUrl ?? null,
+        href: `/t/${t.slug}`,
+      }))
+      .filter((t): t is { id: string; name: string; imageUrl: string; href: string } => Boolean(t.imageUrl))
+      .slice(0, 10),
   };
 }
 
@@ -137,16 +146,17 @@ export default async function PublicHomePage() {
     featuredTeam,
     liveStream,
     highlights,
+    heroTournamentPhotos,
   } = data;
 
   return (
     <>
       {/* 1. Hero */}
       <Hero
-        stats={platformStats}
         liveMatchPreview={liveMatches[0] ?? null}
         standingsPreview={standingsPreview}
         topScorersPreview={topScorers}
+        tournamentPhotos={heroTournamentPhotos}
         featuredPlayer={featuredPlayer}
         featuredTeam={featuredTeam}
       />

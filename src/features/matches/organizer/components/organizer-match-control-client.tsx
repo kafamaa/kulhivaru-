@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import type { PublicMatchDetail } from "@/src/features/matches/public/queries/get-public-match-detail";
@@ -10,6 +11,7 @@ import type { TeamRosterData } from "@/src/features/teams/organizer/queries/get-
 import type { MatchLineupsDerived } from "@/src/features/matches/public/lib/derive-match-lineups";
 
 import {
+  setMatchAwardAction,
   updateMatchLiveAction,
   updateMatchResultAction,
   updateMatchStateAction,
@@ -17,9 +19,14 @@ import {
 import {
   addMatchEventsAction,
   deleteMatchEventAction,
+  syncMatchScoreFromTimelineAction,
   updateMatchEventMinuteAction,
   type OrganizerMatchEventInput,
 } from "@/src/features/matches/organizer/actions/match-events-actions";
+import {
+  autoGenerateMatchLineupAction,
+  saveMatchLineupAction,
+} from "@/src/features/matches/organizer/actions/lineup-actions";
 
 type MatchEventKind =
   | "goal"
@@ -29,6 +36,21 @@ type MatchEventKind =
   | "substitution"
   | "team_foul"
   | "penalty_free_kick";
+
+const EVENT_KIND_OPTIONS: Array<{
+  value: MatchEventKind;
+  label: string;
+  icon: string;
+  futsalOnly?: boolean;
+}> = [
+  { value: "goal", label: "Goal", icon: "⚽" },
+  { value: "own_goal", label: "Own Goal", icon: "🥅" },
+  { value: "yellow_card", label: "Yellow", icon: "🟨" },
+  { value: "red_card", label: "Red", icon: "🟥" },
+  { value: "substitution", label: "Sub", icon: "🔁" },
+  { value: "team_foul", label: "Team Foul", icon: "⚠", futsalOnly: true },
+  { value: "penalty_free_kick", label: "Penalty/FK", icon: "🎯", futsalOnly: true },
+];
 
 function minuteLabel(minute: number | null) {
   if (minute == null) return "—";
@@ -99,12 +121,25 @@ export function OrganizerMatchControlClient({
   homeRoster,
   awayRoster,
   derivedLineups,
+  savedLineups,
+  manOfTheMatchPlayerId,
 }: {
   match: PublicMatchDetail;
   events: PublicMatchEvent[];
   homeRoster: TeamRosterData | null;
   awayRoster: TeamRosterData | null;
   derivedLineups: MatchLineupsDerived;
+  savedLineups: {
+    home: {
+      starting: Array<{ playerId: string; playerName: string }>;
+      substitutes: Array<{ playerId: string; playerName: string }>;
+    };
+    away: {
+      starting: Array<{ playerId: string; playerName: string }>;
+      substitutes: Array<{ playerId: string; playerName: string }>;
+    };
+  };
+  manOfTheMatchPlayerId: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -204,6 +239,17 @@ export function OrganizerMatchControlClient({
   const [periodIndexInput, setPeriodIndexInput] = useState<string>("1");
   const isFutsal = match.tournamentSport.trim().toLowerCase() === "futsal";
   const [editingMinuteByEventId, setEditingMinuteByEventId] = useState<Record<string, string>>({});
+  const [motmPlayerId, setMotmPlayerId] = useState<string>(manOfTheMatchPlayerId ?? "");
+  const [showAdvancedEventForm, setShowAdvancedEventForm] = useState<boolean>(false);
+  const selectedMotmLabel = allPlayers.find((p) => p.playerId === motmPlayerId)?.playerName ?? null;
+  const homeTeamPlayers = useMemo(
+    () => (homeRoster?.players ?? []).map((p) => ({ id: p.id, name: p.name })),
+    [homeRoster],
+  );
+  const awayTeamPlayers = useMemo(
+    () => (awayRoster?.players ?? []).map((p) => ({ id: p.id, name: p.name })),
+    [awayRoster],
+  );
 
   // Keep valid minutes as number or null.
   const parsedMinute = useMemo(() => {
@@ -236,6 +282,33 @@ export function OrganizerMatchControlClient({
   };
 
   const [resultStatus, setResultStatus] = useState<"ft" | "completed">("ft");
+  const [lineupMode, setLineupMode] = useState<"saved" | "derived">(
+    savedLineups.home.starting.length +
+      savedLineups.home.substitutes.length +
+      savedLineups.away.starting.length +
+      savedLineups.away.substitutes.length >
+      0
+      ? "saved"
+      : "derived"
+  );
+  const [lineupMessage, setLineupMessage] = useState<string | null>(null);
+  const [homeRoles, setHomeRoles] = useState<Record<string, "none" | "starting" | "substitute">>({});
+  const [awayRoles, setAwayRoles] = useState<Record<string, "none" | "starting" | "substitute">>({});
+
+  useEffect(() => {
+    function buildRoles(
+      roster: TeamRosterData | null,
+      saved: { starting: Array<{ playerId: string }>; substitutes: Array<{ playerId: string }> }
+    ) {
+      const map: Record<string, "none" | "starting" | "substitute"> = {};
+      for (const p of roster?.players ?? []) map[p.id] = "none";
+      for (const p of saved.starting) map[p.playerId] = "starting";
+      for (const p of saved.substitutes) map[p.playerId] = "substitute";
+      return map;
+    }
+    setHomeRoles(buildRoles(homeRoster, savedLineups.home));
+    setAwayRoles(buildRoles(awayRoster, savedLineups.away));
+  }, [homeRoster, awayRoster, savedLineups.home, savedLineups.away]);
 
   const onSetLive = async () => {
     setError(null);
@@ -364,6 +437,10 @@ export function OrganizerMatchControlClient({
         setError(res.error);
         return;
       }
+      if (res.data) {
+        setHomeScore(res.data.homeScore);
+        setAwayScore(res.data.awayScore);
+      }
       resetComposer();
       router.refresh();
     });
@@ -380,6 +457,10 @@ export function OrganizerMatchControlClient({
       if (!res.ok) {
         setError(res.error);
         return;
+      }
+      if (res.data) {
+        setHomeScore(res.data.homeScore);
+        setAwayScore(res.data.awayScore);
       }
       router.refresh();
     });
@@ -404,12 +485,209 @@ export function OrganizerMatchControlClient({
         setError(res.error);
         return;
       }
+      if (res.data) {
+        setHomeScore(res.data.homeScore);
+        setAwayScore(res.data.awayScore);
+      }
+      router.refresh();
+    });
+  };
+
+  const onSyncScoreFromTimeline = () => {
+    setError(null);
+    startTransition(async () => {
+      const res = await syncMatchScoreFromTimelineAction({
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      if (res.data) {
+        setHomeScore(res.data.homeScore);
+        setAwayScore(res.data.awayScore);
+      }
+      router.refresh();
+    });
+  };
+
+  const onSaveManOfTheMatch = () => {
+    if (!motmPlayerId) {
+      setError("Select a player for Man of the Match.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const res = await setMatchAwardAction({
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+        playerId: motmPlayerId,
+        awardType: "man_of_the_match",
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setLineupMessage("Man of the Match saved.");
+      router.refresh();
+    });
+  };
+
+  const addQuickEvent = (input: {
+    eventType: OrganizerMatchEventInput["eventType"];
+    team: "home" | "away";
+    meta?: Record<string, unknown>;
+  }) => {
+    const minute = liveMinute.trim() === "" ? null : Number(liveMinute);
+    const validMinute = Number.isFinite(minute as number) ? (minute as number) : null;
+    const teamId = input.team === "home" ? match.home?.teamId ?? null : match.away?.teamId ?? null;
+    const teamPlayers = input.team === "home" ? homeTeamPlayers : awayTeamPlayers;
+    const fallbackPlayerId = teamPlayers[0]?.id ?? null;
+
+    const needsPlayer = ["goal", "own_goal", "yellow_card", "red_card"].includes(input.eventType);
+    if (needsPlayer && !fallbackPlayerId) {
+      setError("No roster player found for this team. Add team roster first.");
+      return;
+    }
+
+    setError(null);
+    startTransition(async () => {
+      const res = await addMatchEventsAction({
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+        events: [
+          {
+            eventType: input.eventType,
+            minute: validMinute,
+            playerId: needsPlayer ? fallbackPlayerId : null,
+            teamId: needsPlayer ? null : teamId,
+            periodIndex: null,
+            meta: input.meta ?? {},
+          },
+        ],
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      if (res.data) {
+        setHomeScore(res.data.homeScore);
+        setAwayScore(res.data.awayScore);
+      }
+      router.refresh();
+    });
+  };
+
+  const onUndoLastAction = () => {
+    const lastEvent = events[events.length - 1];
+    if (!lastEvent) return;
+    onDeleteEvent(lastEvent.id);
+  };
+
+  const nextAction = (() => {
+    if (match.status === "scheduled") {
+      return {
+        title: "Start match",
+        description: "Start the match and begin adding timeline events.",
+        cta: "Start Match",
+        onClick: () => onSetState("live"),
+      };
+    }
+    if (match.status === "live") {
+      return {
+        title: "Add match events",
+        description: "Record goals, cards, substitutions, and keep score synced.",
+        cta: "Add Event",
+        onClick: () => {
+          const timelineSection = document.getElementById("timeline-section");
+          timelineSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+        },
+      };
+    }
+    if (match.status === "paused") {
+      return {
+        title: "Resume match",
+        description: "Continue this match and keep updating the timeline.",
+        cta: "Resume Match",
+        onClick: () => onSetState("live"),
+      };
+    }
+    if (match.status === "ft") {
+      return {
+        title: "Complete match",
+        description: "Finalize this match to lock result and continue tournament flow.",
+        cta: "Complete Match",
+        onClick: () => onSetState("completed"),
+      };
+    }
+    return {
+      title: "Match completed",
+      description: "Everything is finished. You can review timeline, lineups, and awards.",
+      cta: "Completed",
+      onClick: () => undefined,
+    };
+  })();
+
+  const saveTeamLineup = (team: "home" | "away") => {
+    const teamId = team === "home" ? match.home?.teamId : match.away?.teamId;
+    const roles = team === "home" ? homeRoles : awayRoles;
+    if (!teamId) return;
+    const entries = Object.entries(roles);
+    const startingPlayerIds = entries.filter(([, role]) => role === "starting").map(([id]) => id);
+    const substitutePlayerIds = entries.filter(([, role]) => role === "substitute").map(([id]) => id);
+    setLineupMessage(null);
+    startTransition(async () => {
+      const res = await saveMatchLineupAction({
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+        teamId,
+        startingPlayerIds,
+        substitutePlayerIds,
+        source: "manual",
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setLineupMode("saved");
+      setLineupMessage(`Saved ${team === "home" ? "home" : "away"} lineup (${res.data.saved} players).`);
+      router.refresh();
+    });
+  };
+
+  const autoTeamLineup = (team: "home" | "away") => {
+    const teamId = team === "home" ? match.home?.teamId : match.away?.teamId;
+    if (!teamId) return;
+    setLineupMessage(null);
+    startTransition(async () => {
+      const res = await autoGenerateMatchLineupAction({
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+        teamId,
+        sport: match.tournamentSport,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      const setRoles = (prev: Record<string, "none" | "starting" | "substitute">) => {
+        const next: Record<string, "none" | "starting" | "substitute"> = {};
+        for (const k of Object.keys(prev)) next[k] = "none";
+        for (const id of res.data.startingPlayerIds) next[id] = "starting";
+        for (const id of res.data.substitutePlayerIds) next[id] = "substitute";
+        return next;
+      };
+      if (team === "home") setHomeRoles((prev) => setRoles(prev));
+      else setAwayRoles((prev) => setRoles(prev));
+      setLineupMode("saved");
+      setLineupMessage(`Auto lineup generated for ${team === "home" ? "home" : "away"} team.`);
       router.refresh();
     });
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-6">
       <header className="mx-auto max-w-7xl px-4 pt-6">
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm">
           <span className="text-slate-400">Tournament</span>
@@ -449,9 +727,9 @@ export function OrganizerMatchControlClient({
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold">Match control</h1>
+            <h1 className="text-2xl font-semibold">Match Center</h1>
             <p className="text-sm text-slate-300">
-              Run the match: lineups, live score, events, and final result.
+              Simple controls for score, timeline, lineups, and result.
             </p>
             <p className="text-xs text-slate-500">
               Match ID: <span className="font-mono">{match.id}</span>
@@ -498,11 +776,79 @@ export function OrganizerMatchControlClient({
       ) : null}
 
       <div className="mx-auto max-w-7xl px-4">
+        <div className="rounded-3xl border border-emerald-400/20 bg-emerald-500/[0.07] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200/90">
+            What to do next
+          </p>
+          <div className="mt-2 rounded-2xl border border-emerald-300/20 bg-black/10 px-3 py-3">
+            <h3 className="text-sm font-semibold text-emerald-100">{nextAction.title}</h3>
+            <p className="mt-1 text-xs text-emerald-200/90">{nextAction.description}</p>
+            <button
+              type="button"
+              onClick={nextAction.onClick}
+              disabled={pending || nextAction.cta === "Completed"}
+              className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+            >
+              {nextAction.cta}
+            </button>
+          </div>
+          <div className="mt-2 grid gap-2 text-xs text-emerald-100 md:grid-cols-5">
+            <p className="rounded-2xl border border-emerald-300/20 bg-black/10 px-3 py-2">1. Start match</p>
+            <p className="rounded-2xl border border-emerald-300/20 bg-black/10 px-3 py-2">2. Add events</p>
+            <p className="rounded-2xl border border-emerald-300/20 bg-black/10 px-3 py-2">3. Check score</p>
+            <p className="rounded-2xl border border-emerald-300/20 bg-black/10 px-3 py-2">4. Finish match</p>
+            <p className="rounded-2xl border border-emerald-300/20 bg-black/10 px-3 py-2">5. Select MOTM</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4">
         <div className="grid gap-4 lg:grid-cols-3">
           <section className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-[0_25px_110px_rgba(0,0,0,0.12)]">
             <h2 className="text-sm font-semibold text-slate-50">Scoreboard</h2>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Goals and own goals from timeline auto-sync here.
+              </p>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onSyncScoreFromTimeline}
+                className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50"
+              >
+                {pending ? "Syncing…" : "Sync score from timeline"}
+              </button>
             <div className="mt-3 grid gap-3">
               <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-3 rounded-2xl border border-white/10 bg-slate-950/20 px-3 py-3">
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        {match.home?.logoUrl ? (
+                          <span className="relative h-7 w-7 overflow-hidden rounded-full border border-white/10">
+                            <Image src={match.home.logoUrl} alt={match.home.teamName} fill className="object-cover" sizes="28px" />
+                          </span>
+                        ) : null}
+                        <span className="truncate text-xs font-semibold text-slate-100">{match.home?.teamName ?? "Home"}</span>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-black tracking-wide text-white">{homeScore} - {awayScore}</div>
+                      <div className="mt-0.5 text-[11px] text-slate-400">
+                        {match.status === "live" ? `${liveMinute || match.liveMinute || 0}' • Live` : match.status.toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <span className="truncate text-xs font-semibold text-slate-100">{match.away?.teamName ?? "Away"}</span>
+                        {match.away?.logoUrl ? (
+                          <span className="relative h-7 w-7 overflow-hidden rounded-full border border-white/10">
+                            <Image src={match.away.logoUrl} alt={match.away.teamName} fill className="object-cover" sizes="28px" />
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-slate-50">
@@ -610,47 +956,81 @@ export function OrganizerMatchControlClient({
 
               <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="text-xs font-semibold text-slate-400">Match state</div>
+                <p className="mt-1 text-[11px] text-slate-500">Only valid next actions are shown.</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => onSetState("live")}
-                    className="rounded-2xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-200 disabled:opacity-50"
-                  >
-                    Live
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => onSetState("paused")}
-                    className="rounded-2xl border border-amber-400/30 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-200 disabled:opacity-50"
-                  >
-                    Pause
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => onSetState("scheduled")}
-                    className="rounded-2xl border border-slate-400/30 bg-slate-500/10 px-3 py-2 text-xs font-semibold text-slate-200 disabled:opacity-50"
-                  >
-                    Stop
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => onSetState("ft")}
-                    className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50"
-                  >
-                    FT
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => onSetState("completed")}
-                    className="col-span-2 rounded-2xl border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 disabled:opacity-50"
-                  >
-                    Complete
-                  </button>
+                  {match.status === "scheduled" ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => onSetState("live")}
+                      className="col-span-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-200 disabled:opacity-50"
+                    >
+                      Start Match
+                    </button>
+                  ) : null}
+                  {match.status === "live" ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => onSetState("paused")}
+                        className="rounded-2xl border border-amber-400/30 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-200 disabled:opacity-50"
+                      >
+                        Pause
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => onSetState("scheduled")}
+                        className="rounded-2xl border border-slate-400/30 bg-slate-500/10 px-3 py-2 text-xs font-semibold text-slate-200 disabled:opacity-50"
+                      >
+                        Stop
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => onSetState("ft")}
+                        className="col-span-2 rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50"
+                      >
+                        Finish (FT)
+                      </button>
+                    </>
+                  ) : null}
+                  {match.status === "paused" ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => onSetState("live")}
+                        className="rounded-2xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-200 disabled:opacity-50"
+                      >
+                        Resume
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => onSetState("ft")}
+                        className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50"
+                      >
+                        Finish
+                      </button>
+                    </>
+                  ) : null}
+                  {match.status === "ft" ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => onSetState("completed")}
+                      className="col-span-2 rounded-2xl border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 disabled:opacity-50"
+                    >
+                      Complete Match
+                    </button>
+                  ) : null}
+                  {match.status === "completed" ? (
+                    <span className="col-span-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-center text-xs font-semibold text-emerald-200">
+                      Match Completed
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
@@ -685,42 +1065,194 @@ export function OrganizerMatchControlClient({
                   </button>
                 </div>
               </div>
+
+              <div className="rounded-3xl border border-amber-400/25 bg-amber-500/10 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-amber-200">
+                    Match Awards
+                  </div>
+                  <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+                    Add card
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-amber-100/80">
+                  Choose Man of the Match for this match. You can update it anytime.
+                </p>
+                <div className="mt-2 grid gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300">
+                      Man of the Match player
+                    </label>
+                    <select
+                      value={motmPlayerId}
+                      onChange={(e) => setMotmPlayerId(e.target.value)}
+                      className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2 text-sm text-slate-50 outline-none focus:border-emerald-400/40"
+                    >
+                      <option value="">Choose player…</option>
+                      {allPlayers.map((p) => (
+                        <option key={p.playerId} value={p.playerId}>
+                          {p.playerName} ({p.teamName})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pending || !motmPlayerId}
+                    onClick={onSaveManOfTheMatch}
+                    className="rounded-2xl bg-amber-500/20 border border-amber-300/40 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
+                  >
+                    {pending ? "Saving…" : "Save Man of the Match"}
+                  </button>
+                  {selectedMotmLabel ? (
+                    <p className="text-xs text-amber-100/90">
+                      Selected: <span className="font-semibold">{selectedMotmLabel}</span>
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-slate-400">Quick actions</div>
+                  <button
+                    type="button"
+                    disabled={pending || events.length === 0}
+                    onClick={onUndoLastAction}
+                    className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+                  >
+                    Undo last
+                  </button>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "goal", team: "home" })} className="rounded-2xl border border-emerald-400/35 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-200 disabled:opacity-50">Goal Home</button>
+                  <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "goal", team: "away" })} className="rounded-2xl border border-emerald-400/35 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-200 disabled:opacity-50">Goal Away</button>
+                  <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "yellow_card", team: "home" })} className="rounded-2xl border border-yellow-400/35 bg-yellow-500/15 px-3 py-2 text-xs font-semibold text-yellow-200 disabled:opacity-50">Yellow Home</button>
+                  <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "yellow_card", team: "away" })} className="rounded-2xl border border-yellow-400/35 bg-yellow-500/15 px-3 py-2 text-xs font-semibold text-yellow-200 disabled:opacity-50">Yellow Away</button>
+                  <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "red_card", team: "home" })} className="rounded-2xl border border-red-400/35 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-200 disabled:opacity-50">Red Home</button>
+                  <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "red_card", team: "away" })} className="rounded-2xl border border-red-400/35 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-200 disabled:opacity-50">Red Away</button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      setEventKind("substitution");
+                      setShowAdvancedEventForm(true);
+                    }}
+                    className="rounded-2xl border border-cyan-400/35 bg-cyan-500/15 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-50"
+                  >
+                    Substitution
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => addQuickEvent({ eventType: "own_goal", team: "home" })}
+                    className="rounded-2xl border border-orange-400/35 bg-orange-500/15 px-3 py-2 text-xs font-semibold text-orange-200 disabled:opacity-50"
+                  >
+                    Own Goal
+                  </button>
+                  {isFutsal ? (
+                    <>
+                      <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "team_foul", team: "home" })} className="rounded-2xl border border-violet-400/35 bg-violet-500/15 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Foul Home</button>
+                      <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "team_foul", team: "away" })} className="rounded-2xl border border-violet-400/35 bg-violet-500/15 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Foul Away</button>
+                      <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "penalty_free_kick", team: "home" })} className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 py-2 text-xs font-semibold text-fuchsia-200 disabled:opacity-50">Penalty</button>
+                      <button type="button" disabled={pending} onClick={() => addQuickEvent({ eventType: "penalty_free_kick", team: "home", meta: { result: "miss" } })} className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-500/15 px-3 py-2 text-xs font-semibold text-fuchsia-200 disabled:opacity-50">Penalty Miss</button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </section>
 
           <section className="lg:col-span-2 space-y-4">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-[0_25px_110px_rgba(0,0,0,0.12)]">
-              <h2 className="text-sm font-semibold text-slate-50">Lineups / Squad (derived)</h2>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <LineupBlock
-                  title="Home: Starting"
+            <details className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-[0_25px_110px_rgba(0,0,0,0.12)]">
+              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-100">
+                Lineups (optional)
+              </summary>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-50">Team Lineups</h2>
+                <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setLineupMode("saved")}
+                    className={`rounded-lg px-2.5 py-1 ${lineupMode === "saved" ? "bg-emerald-500/20 text-emerald-200" : "text-slate-300"}`}
+                  >
+                    Saved (manual/auto)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLineupMode("derived")}
+                    className={`rounded-lg px-2.5 py-1 ${lineupMode === "derived" ? "bg-white/10 text-slate-100" : "text-slate-300"}`}
+                  >
+                    Derived
+                  </button>
+                </div>
+              </div>
+              {lineupMessage ? (
+                <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                  {lineupMessage}
+                </div>
+              ) : null}
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <LineupEditorCard
+                  title="Home lineup"
                   teamName={match.home?.teamName ?? "Home"}
-                  players={derivedLineups.home.starting}
+                  roster={homeRoster}
+                  roles={homeRoles}
+                  onRoleChange={(playerId, role) =>
+                    setHomeRoles((prev) => ({ ...prev, [playerId]: role }))
+                  }
+                  onAuto={() => autoTeamLineup("home")}
+                  onSave={() => saveTeamLineup("home")}
+                  pending={pending}
                 />
-                <LineupBlock
-                  title="Home: Substitutes used"
-                  teamName={match.home?.teamName ?? "Home"}
-                  players={derivedLineups.home.substitutes}
-                />
-                <LineupBlock
-                  title="Away: Starting"
+                <LineupEditorCard
+                  title="Away lineup"
                   teamName={match.away?.teamName ?? "Away"}
-                  players={derivedLineups.away.starting}
-                />
-                <LineupBlock
-                  title="Away: Substitutes used"
-                  teamName={match.away?.teamName ?? "Away"}
-                  players={derivedLineups.away.substitutes}
+                  roster={awayRoster}
+                  roles={awayRoles}
+                  onRoleChange={(playerId, role) =>
+                    setAwayRoles((prev) => ({ ...prev, [playerId]: role }))
+                  }
+                  onAuto={() => autoTeamLineup("away")}
+                  onSave={() => saveTeamLineup("away")}
+                  pending={pending}
                 />
               </div>
-            </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-[0_25px_110px_rgba(0,0,0,0.12)]">
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <LineupBlock
+                  title={lineupMode === "saved" ? "Home: Starting (saved)" : "Home: Starting (derived)"}
+                  teamName={match.home?.teamName ?? "Home"}
+                  players={lineupMode === "saved" ? savedLineups.home.starting : derivedLineups.home.starting}
+                />
+                <LineupBlock
+                  title={lineupMode === "saved" ? "Home: Substitutes (saved)" : "Home: Substitutes used"}
+                  teamName={match.home?.teamName ?? "Home"}
+                  players={lineupMode === "saved" ? savedLineups.home.substitutes : derivedLineups.home.substitutes}
+                />
+                <LineupBlock
+                  title={lineupMode === "saved" ? "Away: Starting (saved)" : "Away: Starting (derived)"}
+                  teamName={match.away?.teamName ?? "Away"}
+                  players={lineupMode === "saved" ? savedLineups.away.starting : derivedLineups.away.starting}
+                />
+                <LineupBlock
+                  title={lineupMode === "saved" ? "Away: Substitutes (saved)" : "Away: Substitutes used"}
+                  teamName={match.away?.teamName ?? "Away"}
+                  players={lineupMode === "saved" ? savedLineups.away.substitutes : derivedLineups.away.substitutes}
+                />
+              </div>
+            </details>
+
+            <div id="timeline-section" className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-[0_25px_110px_rgba(0,0,0,0.12)]">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-50">Event Timeline</h2>
+                  <h2 className="text-sm font-semibold text-slate-50">Match Events</h2>
                   <p className="mt-1 text-xs text-slate-400">
                     Add goals, assists, cards, and substitutions.
+                  </p>
+                  <p className="mt-2 inline-flex items-center rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-200">
+                    Timeline updates auto-sync score, assists, cards, and stats.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -801,10 +1333,38 @@ export function OrganizerMatchControlClient({
 
                 <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
                   <h3 className="text-sm font-semibold text-slate-50">Add Event</h3>
+                  <div className="mt-3">
+                    <p className="text-[11px] font-medium text-slate-400">Quick choose</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {EVENT_KIND_OPTIONS.filter((opt) => (opt.futsalOnly ? isFutsal : true)).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setEventKind(opt.value)}
+                          className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition ${
+                            eventKind === opt.value
+                              ? "border-emerald-400/45 bg-emerald-500/20 text-emerald-100"
+                              : "border-white/10 bg-white/5 text-slate-300 hover:border-emerald-400/25 hover:text-emerald-200"
+                          }`}
+                        >
+                          <span className="mr-1">{opt.icon}</span>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedEventForm((prev) => !prev)}
+                    className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-emerald-400/25 hover:text-emerald-200"
+                  >
+                    {showAdvancedEventForm ? "Hide Advanced Event Form" : "Open Advanced Event Form"}
+                  </button>
+                  {showAdvancedEventForm ? (
                   <div className="mt-3 grid gap-3">
                     <div>
                       <label className="block text-xs font-medium text-slate-300">
-                        Event type
+                        Event type (advanced)
                       </label>
                       <select
                         className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2 text-sm text-slate-50 outline-none focus:border-emerald-400/40"
@@ -1006,11 +1566,26 @@ export function OrganizerMatchControlClient({
                       </div>
                     ) : null}
                   </div>
+                  ) : null}
                 </div>
               </div>
             </div>
           </section>
         </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4">
+        <details className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-slate-100">Match details (advanced)</summary>
+          <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+            <p><span className="text-slate-500">Tournament:</span> {match.tournamentName}</p>
+            <p><span className="text-slate-500">Sport:</span> {match.tournamentSport || "—"}</p>
+            <p><span className="text-slate-500">Round:</span> {match.roundLabel || "—"}</p>
+            <p><span className="text-slate-500">Scheduled:</span> {match.scheduledAt ? new Date(match.scheduledAt).toLocaleString() : "—"}</p>
+            <p><span className="text-slate-500">Match ID:</span> <span className="font-mono text-xs">{match.id}</span></p>
+            <p><span className="text-slate-500">Public page:</span> <Link href={`/match/${match.id}`} className="text-emerald-300 hover:text-emerald-200">Open</Link></p>
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -1053,6 +1628,96 @@ function LineupBlock({
             >
               {p.playerName}
             </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LineupEditorCard({
+  title,
+  teamName,
+  roster,
+  roles,
+  onRoleChange,
+  onAuto,
+  onSave,
+  pending,
+}: {
+  title: string;
+  teamName: string;
+  roster: TeamRosterData | null;
+  roles: Record<string, "none" | "starting" | "substitute">;
+  onRoleChange: (playerId: string, role: "none" | "starting" | "substitute") => void;
+  onAuto: () => void;
+  onSave: () => void;
+  pending: boolean;
+}) {
+  const players = roster?.players ?? [];
+  const startingCount = Object.values(roles).filter((r) => r === "starting").length;
+  const subCount = Object.values(roles).filter((r) => r === "substitute").length;
+
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
+          <p className="mt-1 text-xs text-slate-400">
+            {teamName} · Starting {startingCount} · Substitutes {subCount}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onAuto}
+            disabled={pending || players.length === 0}
+            className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50"
+          >
+            Auto
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={pending}
+            className="rounded-xl border border-white/10 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-slate-100 hover:bg-white/15 disabled:opacity-50"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+      {players.length === 0 ? (
+        <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-xs text-slate-400">
+          No roster players found for this team.
+        </div>
+      ) : (
+        <div className="mt-3 max-h-64 space-y-2 overflow-auto pr-1">
+          {players.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-slate-100">{p.name}</div>
+                <div className="truncate text-[11px] text-slate-500">
+                  {p.position ?? "Position —"}{p.jerseyNumber ? ` · #${p.jerseyNumber}` : ""}
+                </div>
+              </div>
+              <select
+                value={roles[p.id] ?? "none"}
+                onChange={(e) =>
+                  onRoleChange(
+                    p.id,
+                    (e.target.value as "none" | "starting" | "substitute") ?? "none"
+                  )
+                }
+                className="rounded-xl border border-white/10 bg-slate-950/30 px-2 py-1 text-xs text-slate-200 outline-none focus:border-emerald-400/40"
+              >
+                <option value="none">None</option>
+                <option value="starting">Starting</option>
+                <option value="substitute">Substitute</option>
+              </select>
+            </div>
           ))}
         </div>
       )}

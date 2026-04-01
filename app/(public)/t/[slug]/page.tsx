@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { FeaturedMatchCard } from "@/src/features/tournaments/components/public/tournament-overview/featured-match-card";
 import { TournamentSubNav } from "@/src/features/tournaments/components/public/tournament-overview/tournament-sub-nav";
 import { TournamentHero } from "@/src/features/tournaments/components/public/tournament-overview/tournament-hero";
@@ -82,6 +83,41 @@ export default async function TournamentOverviewPage({
         summary={data.summary}
         sponsors={data.sponsorsPreview}
       />
+
+      {data.tournament.championTeam ? (
+        <section className="mx-auto max-w-7xl px-4">
+          <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-4 shadow-[0_18px_70px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+              Champion
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              {data.tournament.championTeam.logoUrl ? (
+                <span className="relative h-12 w-12 overflow-hidden rounded-full border border-amber-300/30 bg-white/10">
+                  <Image
+                    src={data.tournament.championTeam.logoUrl}
+                    alt={data.tournament.championTeam.teamName}
+                    fill
+                    sizes="48px"
+                    className="object-cover"
+                  />
+                </span>
+              ) : (
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-amber-300/30 bg-white/10 text-lg font-bold text-amber-200">
+                  🏆
+                </span>
+              )}
+              <div>
+                <p className="text-lg font-semibold text-amber-100">
+                  {data.tournament.championTeam.teamName}
+                </p>
+                <p className="text-xs text-amber-200/80">
+                  Winner of the final match
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mx-auto max-w-7xl px-4">
         {data.featuredMatch ? (

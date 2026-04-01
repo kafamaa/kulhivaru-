@@ -28,30 +28,16 @@ function IconCalendar(props: { className?: string }) {
   );
 }
 
-function IconUsers(props: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={props.className}>
-      <path d="M16 19a4 4 0 0 0-8 0" />
-      <circle cx="12" cy="11" r="3" />
-      <path d="M22 19a4 4 0 0 0-4-4" />
-      <path d="M18 8a3 3 0 1 1 0 6" />
-      <path d="M2 19a4 4 0 0 1 4-4" />
-      <path d="M6 8a3 3 0 1 0 0 6" />
-    </svg>
-  );
-}
-
-interface HeroStats {
-  tournamentsHosted?: number;
-  matchesPlayed?: number;
-  teamsRegistered?: number;
-}
-
 interface HeroProps {
-  stats?: HeroStats | null;
   liveMatchPreview?: PublicMatchPreview | null;
   standingsPreview?: StandingsRowPreview[];
   topScorersPreview?: TopScorerPreview[];
+  tournamentPhotos?: Array<{
+    id: string;
+    name: string;
+    imageUrl: string;
+    href: string;
+  }>;
   featuredPlayer?: {
     name: string;
     imageUrl?: string | null;
@@ -65,17 +51,13 @@ interface HeroProps {
 }
 
 export function Hero({
-  stats,
   liveMatchPreview,
   standingsPreview = [],
   topScorersPreview = [],
+  tournamentPhotos = [],
   featuredPlayer = null,
   featuredTeam = null,
 }: HeroProps) {
-  const t = stats?.tournamentsHosted ?? 0;
-  const m = stats?.matchesPlayed ?? 0;
-  const teams = stats?.teamsRegistered ?? 0;
-
   const liveStatus = liveMatchPreview?.statusLabel ?? "Live";
   const liveScore = liveMatchPreview?.score ?? "–";
   const liveTournament = liveMatchPreview?.tournamentName ?? "Tournament";
@@ -104,14 +86,14 @@ export function Hero({
         <div className="grid gap-8 md:grid-cols-12 md:items-start">
           {/* Left: message */}
           <div className="md:col-span-7">
-            <div className="mb-6 inline-flex items-center rounded-2xl border border-emerald-300/35 bg-emerald-400/10 px-3 py-2.5 shadow-[0_10px_35px_rgba(16,185,129,0.2)]">
-              <div className="relative h-14 w-[280px] overflow-hidden rounded-xl bg-slate-950/40 sm:h-16 sm:w-[320px]">
+            <div className="mb-6 inline-flex items-center">
+              <div className="relative h-14 w-[280px] overflow-hidden sm:h-16 sm:w-[320px]">
                 <Image
                   src="/kulhivaru-logo.png"
                   alt="Kulhivaru+"
                   fill
                   sizes="320px"
-                  className="object-contain object-center p-1"
+                  className="object-contain object-center"
                   priority
                 />
               </div>
@@ -141,29 +123,39 @@ export function Hero({
               </Link>
             </div>
 
-            {(t > 0 || m > 0 || teams > 0) && (
-              <div className="mt-10 grid grid-cols-3 gap-4 text-center">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                  <IconTrophy className="mx-auto h-4 w-4 text-emerald-300" />
-                  <div className="text-2xl font-bold text-emerald-300">{t}</div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    Tournaments hosted
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                  <IconCalendar className="mx-auto h-4 w-4 text-emerald-300" />
-                  <div className="text-2xl font-bold text-emerald-300">{m}</div>
-                  <div className="mt-1 text-xs text-slate-400">Matches played</div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                  <IconUsers className="mx-auto h-4 w-4 text-emerald-300" />
-                  <div className="text-2xl font-bold text-emerald-300">{teams}</div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    Teams registered
-                  </div>
+            {tournamentPhotos.length > 0 ? (
+              <div className="mt-10 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-3">
+                <div className="relative h-56 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 sm:h-64 lg:h-72">
+                  {tournamentPhotos.slice(0, 6).map((photo, idx, arr) => {
+                    const holdSeconds = 3.5;
+                    const totalSeconds = Math.max(1, arr.length) * holdSeconds;
+                    return (
+                      <Link
+                        key={photo.id}
+                        href={photo.href}
+                        className={`hero-photo-slide absolute inset-0 block ${idx === 0 ? "hero-photo-slide--first" : ""}`}
+                        style={{
+                          animationDuration: `${totalSeconds}s`,
+                          animationDelay: `${idx * holdSeconds}s`,
+                        }}
+                      >
+                        <Image
+                          src={photo.imageUrl}
+                          alt={photo.name}
+                          fill
+                          className="object-contain p-2"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/85 to-transparent px-3 py-2">
+                          <div className="truncate text-xs font-semibold text-slate-100">
+                            {photo.name}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Right: premium preview */}

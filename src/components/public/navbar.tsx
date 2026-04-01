@@ -43,13 +43,13 @@ export function Navbar({ user }: NavbarProps) {
           className="flex shrink-0 items-center gap-2 font-semibold tracking-tight text-slate-50"
           aria-label="Kulhivaru+ home"
         >
-          <span className="relative h-7 w-[92px] overflow-hidden rounded-md border border-white/10 bg-slate-900/60">
+          <span className="relative h-7 w-[92px] overflow-hidden">
             <Image
               src="/kulhivaru-logo.png"
               alt=""
               fill
               sizes="92px"
-              className="object-contain object-center p-0.5"
+              className="object-contain object-center"
             />
           </span>
           <span className="text-lg">Kulhivaru+</span>

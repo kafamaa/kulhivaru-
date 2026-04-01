@@ -93,34 +93,39 @@ export function TodaysMatchesSection({
               <li key={m.id}>
                 <Link
                   href={`/t/${m.tournamentSlug}`}
-                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm transition-colors hover:border-emerald-400/30 hover:bg-slate-950/60"
+                  className="flex items-start justify-between rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm transition-colors hover:border-emerald-400/30 hover:bg-slate-950/60"
                 >
-                  <div className="flex flex-1 items-center justify-between gap-4 min-w-0">
-                    <span className="flex min-w-0 items-center gap-2 truncate text-slate-100">
-                      <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/10 text-[9px] font-bold text-slate-200">
-                        {m.homeTeamLogoUrl ? (
-                          <Image src={m.homeTeamLogoUrl} alt={m.homeTeam} fill className="object-cover" />
-                        ) : (
-                          initials(m.homeTeam)
-                        )}
+                  <div className="min-w-0 flex-1">
+                    <p className="mb-1 truncate text-[11px] font-medium uppercase tracking-wide text-emerald-300/90">
+                      {m.tournamentName}
+                    </p>
+                    <div className="flex items-center justify-between gap-4 min-w-0">
+                      <span className="flex min-w-0 items-center gap-2 truncate text-slate-100">
+                        <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/10 text-[9px] font-bold text-slate-200">
+                          {m.homeTeamLogoUrl ? (
+                            <Image src={m.homeTeamLogoUrl} alt={m.homeTeam} fill className="object-cover" />
+                          ) : (
+                            initials(m.homeTeam)
+                          )}
+                        </span>
+                        <span className="truncate">{m.homeTeam}</span>
                       </span>
-                      <span className="truncate">{m.homeTeam}</span>
-                    </span>
-                    <span className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-semibold text-slate-50">
-                      {m.score ?? "–"}
-                    </span>
-                    <span className="flex min-w-0 items-center justify-end gap-2 truncate text-right text-slate-100">
-                      <span className="truncate">{m.awayTeam}</span>
-                      <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/10 text-[9px] font-bold text-slate-200">
-                        {m.awayTeamLogoUrl ? (
-                          <Image src={m.awayTeamLogoUrl} alt={m.awayTeam} fill className="object-cover" />
-                        ) : (
-                          initials(m.awayTeam)
-                        )}
+                      <span className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-semibold text-slate-50">
+                        {m.score ?? "–"}
                       </span>
-                    </span>
+                      <span className="flex min-w-0 items-center justify-end gap-2 truncate text-right text-slate-100">
+                        <span className="truncate">{m.awayTeam}</span>
+                        <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/10 text-[9px] font-bold text-slate-200">
+                          {m.awayTeamLogoUrl ? (
+                            <Image src={m.awayTeamLogoUrl} alt={m.awayTeam} fill className="object-cover" />
+                          ) : (
+                            initials(m.awayTeam)
+                          )}
+                        </span>
+                      </span>
+                    </div>
                   </div>
-                  <span className="ml-3 shrink-0 text-xs text-slate-400">
+                  <span className="ml-3 mt-5 shrink-0 text-xs text-slate-400">
                     {m.statusLabel}
                   </span>
                 </Link>

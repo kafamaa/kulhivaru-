@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import type { TeamRosterData, TeamRosterPlayer } from "../queries/get-team-roster";
 import {
   addPlayerToTeamAction,
+  importPlayersCsvToTeamAction,
   removePlayerAction,
   updatePlayerAction,
 } from "@/src/features/players/organizer/actions/player-actions";
@@ -27,6 +28,8 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
   const [logoUrl, setLogoUrl] = useState<string | null>(data.logoUrl);
   const [logoMessage, setLogoMessage] = useState<string | null>(null);
   const [uploadingLogo, startUploadLogo] = useTransition();
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setLogoUrl(data.logoUrl);
@@ -56,6 +59,7 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
 
   const onSubmit = async (values: {
     name: string;
+    jerseyNumber: string;
     nickname: string;
     dob: string;
     idNumber: string;
@@ -69,6 +73,7 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
       const res = await addPlayerToTeamAction({
         teamId: data.teamId,
         name: values.name,
+        jerseyNumber: values.jerseyNumber || null,
         position: values.position || null,
         imageUrl: values.imageUrl || null,
         nickname: values.nickname || null,
@@ -90,6 +95,7 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
       playerId: editing.id,
       teamId: data.teamId,
       name: values.name,
+      jerseyNumber: values.jerseyNumber || null,
       position: values.position || null,
       imageUrl: values.imageUrl || null,
       nickname: values.nickname || null,
@@ -138,6 +144,29 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
         setLogoMessage(e instanceof Error ? e.message : "Upload failed.");
       }
     });
+  }
+
+  async function handlePlayersCsvImport(file: File) {
+    setImportMessage(null);
+    setImportingCsv(true);
+    try {
+      const csvText = await file.text();
+      const res = await importPlayersCsvToTeamAction({
+        teamId: data.teamId,
+        csvText,
+      });
+      if (!res.ok) {
+        setImportMessage(res.error);
+      } else {
+        setImportMessage(
+          `Imported ${res.data.created} new players, updated ${res.data.updated}, skipped ${res.data.skipped}.`
+        );
+      }
+    } catch (e) {
+      setImportMessage(e instanceof Error ? e.message : "Could not import CSV.");
+    } finally {
+      setImportingCsv(false);
+    }
   }
 
   return (
@@ -194,6 +223,20 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
           >
             View public
           </Link>
+          <label className="cursor-pointer rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-3 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-950/35">
+            {importingCsv ? "Importing…" : "Import Players CSV"}
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              disabled={importingCsv}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                void handlePlayersCsvImport(file);
+              }}
+            />
+          </label>
           <button
             type="button"
             onClick={openCreate}
@@ -204,9 +247,20 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
         </div>
       </header>
 
+      {importMessage ? (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+          {importMessage}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-slate-400">
           {data.players.length} player{data.players.length !== 1 ? "s" : ""}
+        </div>
+        <div className="w-full sm:max-w-md">
+          <p className="mb-1 text-[11px] text-slate-500">
+            CSV columns: name, jersey_number, position, image_url, nickname, dob, id_number
+          </p>
         </div>
         <input
           value={query}
@@ -218,10 +272,11 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
 
       <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
         <div className="grid grid-cols-1 gap-2 border-b border-slate-800 bg-slate-900/60 px-4 py-3 text-xs text-slate-400 sm:grid-cols-12">
-          <span className="sm:col-span-4">Player</span>
+          <span className="sm:col-span-3">Player</span>
+          <span className="sm:col-span-2">Jersey</span>
           <span className="sm:col-span-3">Position</span>
           <span className="sm:col-span-3">ID number</span>
-          <span className="sm:col-span-2 text-right">Actions</span>
+          <span className="sm:col-span-1 text-right">Actions</span>
         </div>
         {filtered.length === 0 ? (
           <div className="px-4 py-10 text-center text-slate-500">
@@ -240,7 +295,7 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
               key={p.id}
               className="grid grid-cols-1 items-center gap-2 border-b border-slate-800/80 px-4 py-3 last:border-b-0 sm:grid-cols-12"
             >
-              <div className="sm:col-span-4 flex items-center gap-2 min-w-0">
+              <div className="sm:col-span-3 flex items-center gap-2 min-w-0">
                 {p.imageUrl ? (
                   <Image
                     src={p.imageUrl}
@@ -256,13 +311,16 @@ export function TeamRosterSection({ data }: TeamRosterSectionProps) {
                 )}
                 <span className="truncate font-medium text-slate-100">{p.name}</span>
               </div>
+              <div className="sm:col-span-2 text-sm font-semibold text-slate-200">
+                {p.jerseyNumber ?? "—"}
+              </div>
               <div className="sm:col-span-3 text-sm text-slate-300">
                 {p.position ?? "—"}
               </div>
               <div className="sm:col-span-3 text-xs text-slate-400 font-mono">
                 {p.idNumber ?? "—"}
               </div>
-              <div className="sm:col-span-2 flex justify-end gap-2">
+              <div className="sm:col-span-1 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => openEdit(p)}

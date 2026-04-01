@@ -115,6 +115,12 @@ export default async function OrganizerTournamentOverviewPage({
             Standings
           </Link>
           <Link
+            href={`/organizer/t/${data.tournamentId}/structure`}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
+          >
+            Structure + knockout
+          </Link>
+          <Link
             href={`/organizer/t/${data.tournamentId}/settings`}
             className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
           >

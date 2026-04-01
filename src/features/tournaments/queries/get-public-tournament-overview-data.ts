@@ -31,6 +31,11 @@ export interface TournamentOverviewTournamentMeta {
   logoUrl: string | null;
   bannerUrl: string | null;
   teamCount: number;
+  championTeam: {
+    teamId: string;
+    teamName: string;
+    logoUrl: string | null;
+  } | null;
 }
 
 export interface TournamentOverviewSummary {
@@ -110,17 +115,85 @@ export async function getPublicTournamentOverviewData(input: {
 
   const tournamentId = String(tRow.id);
 
-  const { data: baseT, error: baseTerr } = await supabase
+  let { data: baseT } = await supabase
     .from("tournaments")
-    .select("start_date, end_date")
+    .select("start_date, end_date, champion_team_id")
     .eq("id", tournamentId)
     .single();
+  if (!baseT) {
+    // Backward compatibility for databases without champion_team_id.
+    const fallback = await supabase
+      .from("tournaments")
+      .select("start_date, end_date")
+      .eq("id", tournamentId)
+      .single();
+    baseT = fallback.data as any;
+  }
 
   const startDate =
     (baseT?.start_date as string | null | undefined) ??
     ((tRow.start_date as string | null | undefined) ?? null);
 
   const endDate = (baseT?.end_date as string | null | undefined) ?? null;
+
+  const championTeamId = (baseT as any)?.champion_team_id
+    ? String((baseT as any).champion_team_id)
+    : null;
+  let championTeam: TournamentOverviewTournamentMeta["championTeam"] = null;
+  if (championTeamId) {
+    const { data: championRow } = await supabase
+      .from("teams")
+      .select("id,name,logo_url")
+      .eq("id", championTeamId)
+      .maybeSingle();
+    if (championRow) {
+      championTeam = {
+        teamId: String(championRow.id),
+        teamName: String(championRow.name ?? "Champion"),
+        logoUrl: (championRow.logo_url as string | null) ?? null,
+      };
+    }
+  }
+
+  // Fallback: derive champion from completed final match if champion_team_id is not set yet.
+  if (!championTeam) {
+    const { data: finalMatch } = await supabase
+      .from("matches")
+      .select("home_team_id,away_team_id,home_score,away_score,status,slot_code,round_label")
+      .eq("tournament_id", tournamentId)
+      .in("status", ["ft", "completed"])
+      .or("slot_code.eq.F1,round_label.ilike.%final%")
+      .order("scheduled_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (finalMatch) {
+      const homeScore = Number((finalMatch as any).home_score ?? 0);
+      const awayScore = Number((finalMatch as any).away_score ?? 0);
+      const homeTeamId = (finalMatch as any).home_team_id
+        ? String((finalMatch as any).home_team_id)
+        : null;
+      const awayTeamId = (finalMatch as any).away_team_id
+        ? String((finalMatch as any).away_team_id)
+        : null;
+
+      if (homeTeamId && awayTeamId && homeScore !== awayScore) {
+        const winnerId = homeScore > awayScore ? homeTeamId : awayTeamId;
+        const { data: winnerTeam } = await supabase
+          .from("teams")
+          .select("id,name,logo_url")
+          .eq("id", winnerId)
+          .maybeSingle();
+        if (winnerTeam) {
+          championTeam = {
+            teamId: String(winnerTeam.id),
+            teamName: String(winnerTeam.name ?? "Champion"),
+            logoUrl: (winnerTeam.logo_url as string | null) ?? null,
+          };
+        }
+      }
+    }
+  }
 
   const tournament: TournamentOverviewTournamentMeta = {
     tournamentId,
@@ -135,6 +208,7 @@ export async function getPublicTournamentOverviewData(input: {
     logoUrl: (tRow.logo_url as string | null) ?? null,
     bannerUrl: (tRow.cover_image_url as string | null) ?? null,
     teamCount: Number(tRow.team_count ?? 0) ?? 0,
+    championTeam,
   };
 
   // Groups / categories (from standings_cache group_id presence)

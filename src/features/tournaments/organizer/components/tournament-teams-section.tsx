@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { TournamentTeamsData } from "../queries/get-tournament-teams";
 import { TournamentTeamsList } from "./tournament-teams-list";
 import { InviteTeamDialog } from "./invite-team-dialog";
+import { ImportCsvDialog } from "./import-csv-dialog";
 
 interface TournamentTeamsSectionProps {
   data: TournamentTeamsData;
@@ -13,6 +14,7 @@ interface TournamentTeamsSectionProps {
 
 export function TournamentTeamsSection({ data }: TournamentTeamsSectionProps) {
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const router = useRouter();
 
   const handleInviteSuccess = () => {
@@ -41,13 +43,22 @@ export function TournamentTeamsSection({ data }: TournamentTeamsSectionProps) {
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setInviteOpen(true)}
-          className="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 hover:text-slate-100"
-        >
-          + Add team
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="shrink-0 rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-950/35"
+          >
+            Import CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            className="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 hover:text-slate-100"
+          >
+            + Add team
+          </button>
+        </div>
       </header>
 
       <TournamentTeamsList
@@ -59,6 +70,12 @@ export function TournamentTeamsSection({ data }: TournamentTeamsSectionProps) {
         tournamentId={data.tournamentId}
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
+        onSuccess={handleInviteSuccess}
+      />
+      <ImportCsvDialog
+        tournamentId={data.tournamentId}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
         onSuccess={handleInviteSuccess}
       />
     </div>

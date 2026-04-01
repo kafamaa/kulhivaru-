@@ -24,7 +24,40 @@ export interface OrganizerMatchEventInput {
   meta?: Record<string, unknown>;
 }
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; data?: { homeScore: number; awayScore: number } }
+  | { ok: false; error: string };
+
+async function syncMatchScoreFromEvents(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  matchId: string
+): Promise<ActionResult> {
+  const { data, error } = await supabase.rpc("rpc_sync_match_score_from_events", {
+    p_match_id: matchId,
+  });
+  if (error) return { ok: false, error: error.message };
+  const homeScore = Number((data as any)?.home_score ?? 0);
+  const awayScore = Number((data as any)?.away_score ?? 0);
+  return { ok: true, data: { homeScore, awayScore } };
+}
+
+export async function syncMatchScoreFromTimelineAction(input: {
+  tournamentId: string;
+  matchId: string;
+}): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const syncResult = await syncMatchScoreFromEvents(supabase, input.matchId);
+  if (!syncResult.ok) return syncResult;
+  const tid = await resolveMatchTournamentId(supabase, input.matchId, input.tournamentId);
+  revalidatePath(`/organizer/match/${input.matchId}`);
+  revalidatePath(`/organizer/t/${tid}/matches`);
+  revalidatePath(`/organizer/t/${tid}`);
+  revalidatePath(`/match/${input.matchId}`);
+  revalidatePath("/stats");
+  revalidatePath("/matches");
+  revalidatePath("/");
+  return syncResult;
+}
 
 export async function addMatchEventsAction(input: {
   tournamentId: string;
@@ -59,13 +92,19 @@ export async function addMatchEventsAction(input: {
     if (error) return { ok: false, error: error.message };
   }
 
+  const syncResult = await syncMatchScoreFromEvents(supabase, input.matchId);
+  if (!syncResult.ok) return syncResult;
+
   const tid = await resolveMatchTournamentId(supabase, input.matchId, input.tournamentId);
   revalidatePath(`/organizer/match/${input.matchId}`);
   revalidatePath(`/organizer/t/${tid}/matches`);
   revalidatePath(`/organizer/t/${tid}`);
   revalidatePath(`/match/${input.matchId}`);
+  revalidatePath("/stats");
+  revalidatePath("/matches");
+  revalidatePath("/");
 
-  return { ok: true };
+  return syncResult;
 }
 
 export async function deleteMatchEventAction(input: {
@@ -82,13 +121,19 @@ export async function deleteMatchEventAction(input: {
 
   if (error) return { ok: false, error: error.message };
 
+  const syncResult = await syncMatchScoreFromEvents(supabase, input.matchId);
+  if (!syncResult.ok) return syncResult;
+
   const tid = await resolveMatchTournamentId(supabase, input.matchId, input.tournamentId);
   revalidatePath(`/organizer/match/${input.matchId}`);
   revalidatePath(`/organizer/t/${tid}/matches`);
   revalidatePath(`/organizer/t/${tid}`);
   revalidatePath(`/match/${input.matchId}`);
+  revalidatePath("/stats");
+  revalidatePath("/matches");
+  revalidatePath("/");
 
-  return { ok: true };
+  return syncResult;
 }
 
 export async function updateMatchEventMinuteAction(input: {
@@ -106,12 +151,18 @@ export async function updateMatchEventMinuteAction(input: {
 
   if (error) return { ok: false, error: error.message };
 
+  const syncResult = await syncMatchScoreFromEvents(supabase, input.matchId);
+  if (!syncResult.ok) return syncResult;
+
   const tid = await resolveMatchTournamentId(supabase, input.matchId, input.tournamentId);
   revalidatePath(`/organizer/match/${input.matchId}`);
   revalidatePath(`/organizer/t/${tid}/matches`);
   revalidatePath(`/organizer/t/${tid}`);
   revalidatePath(`/match/${input.matchId}`);
+  revalidatePath("/stats");
+  revalidatePath("/matches");
+  revalidatePath("/");
 
-  return { ok: true };
+  return syncResult;
 }
 

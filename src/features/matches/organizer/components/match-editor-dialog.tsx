@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { OrganizerTournamentMatchRow } from "../queries/get-tournament-matches";
-import { updateMatchScheduleAction } from "../actions/match-actions";
+import { updateMatchDetailsAction } from "../actions/match-actions";
 
 interface MatchEditorDialogProps {
   open: boolean;
   tournamentId: string;
+  teams: Array<{ id: string; name: string }>;
   match: OrganizerTournamentMatchRow | null;
   onClose: () => void;
   onSuccess: () => void;
@@ -15,10 +16,13 @@ interface MatchEditorDialogProps {
 export function MatchEditorDialog({
   open,
   tournamentId,
+  teams,
   match,
   onClose,
   onSuccess,
 }: MatchEditorDialogProps) {
+  const [homeTeamId, setHomeTeamId] = useState("");
+  const [awayTeamId, setAwayTeamId] = useState("");
   const [roundLabel, setRoundLabel] = useState("");
   const [dateTimeLocal, setDateTimeLocal] = useState(""); // yyyy-MM-ddTHH:mm
   const [submitting, setSubmitting] = useState(false);
@@ -27,6 +31,8 @@ export function MatchEditorDialog({
   useEffect(() => {
     if (open && match) {
       setError(null);
+      setHomeTeamId(match.homeTeamId ?? "");
+      setAwayTeamId(match.awayTeamId ?? "");
       setRoundLabel(match.roundLabel ?? "");
       setDateTimeLocal(match.scheduledAt ? toLocalInput(match.scheduledAt) : "");
     }
@@ -37,11 +43,21 @@ export function MatchEditorDialog({
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!homeTeamId || !awayTeamId) {
+      setError("Please select both home and away teams.");
+      return;
+    }
+    if (homeTeamId === awayTeamId) {
+      setError("Home and away teams must be different.");
+      return;
+    }
     setSubmitting(true);
     const scheduledAt = dateTimeLocal ? new Date(dateTimeLocal).toISOString() : null;
-    const res = await updateMatchScheduleAction({
+    const res = await updateMatchDetailsAction({
       tournamentId,
       matchId: match.id,
+      homeTeamId,
+      awayTeamId,
       scheduledAt,
       roundLabel: roundLabel.trim() || null,
     });
@@ -74,6 +90,38 @@ export function MatchEditorDialog({
           <div className="text-sm text-slate-300">
             <span className="font-medium text-slate-100">{match.homeTeamName}</span> vs{" "}
             <span className="font-medium text-slate-100">{match.awayTeamName}</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-200">Home team</label>
+              <select
+                value={homeTeamId}
+                onChange={(e) => setHomeTeamId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
+              >
+                <option value="">Select home team</option>
+                {teams.map((t) => (
+                  <option key={`home-${t.id}`} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-200">Away team</label>
+              <select
+                value={awayTeamId}
+                onChange={(e) => setAwayTeamId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
+              >
+                <option value="">Select away team</option>
+                {teams.map((t) => (
+                  <option key={`away-${t.id}`} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-200">Round label</label>

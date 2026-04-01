@@ -11,6 +11,7 @@ interface PlayerEditorDialogProps {
   onClose: () => void;
   onSubmit: (values: {
     name: string;
+    jerseyNumber: string;
     nickname: string;
     dob: string;
     idNumber: string;
@@ -33,6 +34,7 @@ export function PlayerEditorDialog({
   teamId,
 }: PlayerEditorDialogProps) {
   const [name, setName] = useState("");
+  const [jerseyNumber, setJerseyNumber] = useState("");
   const [nickname, setNickname] = useState("");
   const [dob, setDob] = useState("");
   const [idNumber, setIdNumber] = useState("");
@@ -44,6 +46,7 @@ export function PlayerEditorDialog({
   useEffect(() => {
     if (open) {
       setName(initial?.name ?? "");
+      setJerseyNumber(initial?.jerseyNumber ?? "");
       setNickname(initial?.nickname ?? "");
       setDob(initial?.dob ?? "");
       setIdNumber(initial?.idNumber ?? "");
@@ -104,7 +107,7 @@ export function PlayerEditorDialog({
           className="space-y-4 p-4"
           onSubmit={(e) => {
             e.preventDefault();
-            onSubmit({ name, nickname, dob, idNumber, position, imageUrl });
+            onSubmit({ name, jerseyNumber, nickname, dob, idNumber, position, imageUrl });
           }}
         >
           {error && (
@@ -120,6 +123,15 @@ export function PlayerEditorDialog({
               className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
               placeholder="Player name"
               required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-200">Jersey number</label>
+            <input
+              value={jerseyNumber}
+              onChange={(e) => setJerseyNumber(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
+              placeholder="e.g. 10"
             />
           </div>
           <div>

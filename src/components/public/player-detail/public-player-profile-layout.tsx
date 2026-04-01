@@ -76,6 +76,27 @@ function inferExperienceLevel(matchesPlayed: number): string {
   return "Developing";
 }
 
+const ACHIEVEMENT_LABELS: Record<string, string> = {
+  man_of_the_match: "Man of the Match",
+  mvp: "Best Player (MVP)",
+  best_goalkeeper: "Best Goalkeeper",
+  best_defender: "Best Defender",
+  young_player: "Young Player",
+  top_scorer: "Top Scorer",
+  best_assist_provider: "Best Assist Provider",
+  champion_trophy: "Champion Trophy",
+  runner_up_trophy: "Runner-up Trophy",
+};
+
+function trophyCardTitle(item: {
+  trophyTitle?: string | null;
+  achievementKey: string;
+  tournamentName: string;
+}): string {
+  if (item.trophyTitle && item.trophyTitle.trim()) return item.trophyTitle.trim();
+  return `${ACHIEVEMENT_LABELS[item.achievementKey] ?? item.achievementKey} - ${item.tournamentName}`;
+}
+
 function SectionCard({
   title,
   children,
@@ -179,9 +200,24 @@ export function PublicPlayerProfileLayout({
   const latestMatches = recentMatches.slice(0, 6);
   const liveNow = recentMatches.find((m) => String(m.status).toLowerCase() === "live") ?? null;
 
-  const followers = { followers: 799, following: 178 };
   const playingStyle = inferPlayingStyle(performance);
   const experienceLevel = inferExperienceLevel(performance.matchesPlayed);
+  const motmTotal = profile.achievements
+    .filter((a) => a.achievementKey === "man_of_the_match")
+    .reduce((sum, a) => sum + a.valueInt, 0);
+  const totalAwards = profile.achievements.reduce((sum, a) => sum + (a.valueInt ?? 0), 0);
+  const achievementTotals = profile.achievements.reduce<Record<string, number>>((acc, item) => {
+    if (!item.achievementKey) return acc;
+    acc[item.achievementKey] = (acc[item.achievementKey] ?? 0) + (item.valueInt ?? 0);
+    return acc;
+  }, {});
+  const nonMotmAwards = Object.entries(achievementTotals).filter(
+    ([key, value]) => key !== "man_of_the_match" && value > 0,
+  );
+  const trophyAwards = profile.achievements.filter(
+    (a) => a.achievementKey !== "man_of_the_match" && (a.valueInt ?? 0) > 0,
+  );
+  const championTournaments = profile.tournaments.filter((t) => t.isChampion);
 
   return (
     <div className="relative">
@@ -236,6 +272,9 @@ export function PublicPlayerProfileLayout({
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Chip tone="cyan">Sport: {sport}</Chip>
                     <Chip tone="emerald">Registration: {registration}</Chip>
+                    {championTournaments.length > 0 ? (
+                      <Chip tone="emerald">Champion x{championTournaments.length}</Chip>
+                    ) : null}
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <MetaPill icon={UserCheck} label="Position" value={positionText} />
@@ -262,16 +301,16 @@ export function PublicPlayerProfileLayout({
                   <div className="flex flex-wrap gap-3 lg:justify-end">
                     <div className="w-[200px] rounded-2xl border border-white/10 bg-white/5 p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-                        Followers
+                        Tournament entries
                       </div>
                       <div className="mt-1 text-base font-bold text-white tabular-nums">
-                        {followers.followers}
+                        {profile.tournaments.length}
                       </div>
                       <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-                        Following
+                        Awards / Champion
                       </div>
                       <div className="mt-1 text-base font-bold text-white tabular-nums">
-                        {followers.following}
+                        {totalAwards} / {championTournaments.length}
                       </div>
                     </div>
                   </div>
@@ -437,6 +476,7 @@ export function PublicPlayerProfileLayout({
                             <th className="px-3 py-2 text-left">Tournament</th>
                             <th className="px-3 py-2 text-left">Sport</th>
                             <th className="px-3 py-2 text-left">Status</th>
+                            <th className="px-3 py-2 text-left">Champion</th>
                             <th className="px-3 py-2 text-left">Rank</th>
                             <th className="px-3 py-2 text-left">Points</th>
                             <th className="px-3 py-2 text-left">Played</th>
@@ -448,6 +488,15 @@ export function PublicPlayerProfileLayout({
                               <td className="px-3 py-2 text-white/90">{t.tournamentName}</td>
                               <td className="px-3 py-2 text-slate-300">{t.tournamentSport}</td>
                               <td className="px-3 py-2 text-slate-300">{t.entryStatus}</td>
+                              <td className="px-3 py-2 text-slate-300">
+                                {t.isChampion ? (
+                                  <span className="rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
+                                    Champion
+                                  </span>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-white/90">{t.standingsRank ?? "-"}</td>
                               <td className="px-3 py-2 text-white/90">{t.standingsPoints ?? "-"}</td>
                               <td className="px-3 py-2 text-white/90">{t.standingsPlayed ?? "-"}</td>
@@ -514,31 +563,70 @@ export function PublicPlayerProfileLayout({
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-300">
                         Titles won
                       </div>
-                      <div className="mt-2 text-sm font-bold text-white">Not provided</div>
+                      <div className="mt-2 text-sm font-bold text-white">
+                        MOTM awards: {motmTotal}
+                      </div>
+                      {nonMotmAwards.length ? (
+                        <div className="mt-1 text-xs text-slate-300">
+                          Tournament awards: {nonMotmAwards.length}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </SectionCard>
 
-                <SectionCard title="Achievements / Badges">
+                <SectionCard title="Trophy Cabin">
                   <div className="flex flex-wrap gap-2">
+                    {motmTotal > 0 ? (
+                      <Chip tone="emerald">Man of the Match x{motmTotal}</Chip>
+                    ) : null}
+                    {nonMotmAwards.map(([key, value]) => (
+                      <Chip key={key} tone="emerald">
+                        {(ACHIEVEMENT_LABELS[key] ?? key).replaceAll("_", " ")} x{value}
+                      </Chip>
+                    ))}
                     {rankings.topScorersRank != null ? (
                       <>
-                        <Chip tone="emerald">
-                          Top Scorer #{rankings.topScorersRank}
-                        </Chip>
-                        <Chip tone="cyan">
-                          Top scorer candidate ({rankings.topScorersGoals} goals)
-                        </Chip>
-                        <Chip tone="cyan">Golden Glove (Not provided)</Chip>
-                        <Chip tone="rose">MVP (Not provided)</Chip>
+                        <Chip tone="emerald">Top Scorer #{rankings.topScorersRank}</Chip>
+                        <Chip tone="cyan">Top scorer candidate ({rankings.topScorersGoals} goals)</Chip>
                       </>
                     ) : (
-                      <>
-                        <Chip tone="cyan">Top scorer (Not available)</Chip>
-                        <Chip tone="cyan">Golden Glove (Not provided)</Chip>
-                      </>
+                      <Chip tone="cyan">Top scorer (Not available)</Chip>
                     )}
                   </div>
+
+                  <div className="h-px w-full bg-white/10" />
+
+                  {trophyAwards.length === 0 ? (
+                    <div className="text-sm text-slate-400">No trophy awards added yet.</div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {trophyAwards.map((award) => (
+                        <div
+                          key={`${award.achievementKey}-${award.tournamentId}`}
+                          className="rounded-xl border border-white/10 bg-white/5 p-3"
+                        >
+                          {award.trophyImageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={award.trophyImageUrl}
+                              alt={trophyCardTitle(award)}
+                              className="h-28 w-full rounded-lg bg-slate-900 object-contain"
+                            />
+                          ) : (
+                            <div className="flex h-28 w-full items-center justify-center rounded-lg border border-white/10 bg-slate-900 text-4xl">
+                              🏆
+                            </div>
+                          )}
+                          <div className="mt-2 text-sm font-semibold text-white">{trophyCardTitle(award)}</div>
+                          <div className="mt-1 text-xs text-slate-400">
+                            {ACHIEVEMENT_LABELS[award.achievementKey] ?? award.achievementKey} ·{" "}
+                            {award.tournamentName} · x{award.valueInt}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </SectionCard>
               </div>
 
@@ -558,6 +646,11 @@ export function PublicPlayerProfileLayout({
                           <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
                             {t.tournamentSport} · {t.entryStatus}
                           </div>
+                        {t.isChampion ? (
+                          <div className="mt-2 inline-flex rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                            Champion
+                          </div>
+                        ) : null}
                         </div>
                       ))}
                       {profile.tournaments.length > 3 ? (
@@ -585,8 +678,35 @@ export function PublicPlayerProfileLayout({
         {activeTab === "scores" ? (
           <div className="space-y-5">
             <SectionCard title="Live strip + Latest matches">
-              <div className="text-sm text-slate-300">
-                Showing latest and live matches.
+              <div className="overflow-hidden rounded-xl border border-white/10">
+                <table className="w-full text-sm">
+                  <thead className="bg-white/5 text-slate-300">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Opponent</th>
+                      <th className="px-3 py-2 text-left">Score</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestMatches.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-6 text-center text-slate-400">
+                          No matches found in database.
+                        </td>
+                      </tr>
+                    ) : (
+                      latestMatches.map((m) => (
+                        <tr key={`scores-${m.matchId}`} className="border-t border-white/10 hover:bg-white/5">
+                          <td className="px-3 py-2 text-slate-200">{formatShortDate(m.scheduledAt)}</td>
+                          <td className="px-3 py-2 text-white/90">{m.opponentTeamName}</td>
+                          <td className="px-3 py-2 text-white/90">{m.scoreText ?? "*"}</td>
+                          <td className="px-3 py-2 text-slate-300">{m.status}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </SectionCard>
           </div>
@@ -642,25 +762,68 @@ export function PublicPlayerProfileLayout({
         {activeTab === "transfers" ? (
           <div className="space-y-5">
             <SectionCard title="Transfers">
-              <div className="text-sm text-slate-300">Not provided in MVP data.</div>
+              <div className="text-sm text-slate-300">
+                No transfer records available in database for this player.
+              </div>
             </SectionCard>
           </div>
         ) : null}
 
         {activeTab === "honors" ? (
           <div className="space-y-5">
-            <SectionCard title="Honors & Badges">
+            <SectionCard title="Trophy Cabin">
               <div className="flex flex-wrap gap-2">
+                {motmTotal > 0 ? (
+                  <Chip tone="emerald">Man of the Match x{motmTotal}</Chip>
+                ) : (
+                  <Chip tone="cyan">No match awards yet</Chip>
+                )}
+                {nonMotmAwards.map(([key, value]) => (
+                  <Chip key={key} tone="emerald">
+                    {(ACHIEVEMENT_LABELS[key] ?? key).replaceAll("_", " ")} x{value}
+                  </Chip>
+                ))}
                 {rankings.topScorersRank != null ? (
                   <>
                     <Chip tone="emerald">Top Scorer #{rankings.topScorersRank}</Chip>
                     <Chip tone="cyan">Top scorer candidate ({rankings.topScorersGoals} goals)</Chip>
-                    <Chip tone="cyan">Golden Glove (Not provided)</Chip>
                   </>
                 ) : (
                   <Chip tone="cyan">No public honors yet</Chip>
                 )}
               </div>
+
+              <div className="h-px w-full bg-white/10" />
+
+              {trophyAwards.length === 0 ? (
+                <div className="text-sm text-slate-400">No trophy awards added yet.</div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {trophyAwards.map((award) => (
+                    <div
+                      key={`honors-${award.achievementKey}-${award.tournamentId}`}
+                      className="rounded-xl border border-white/10 bg-white/5 p-3"
+                    >
+                      {award.trophyImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={award.trophyImageUrl}
+                          alt={trophyCardTitle(award)}
+                          className="h-28 w-full rounded-lg bg-slate-900 object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-28 w-full items-center justify-center rounded-lg border border-white/10 bg-slate-900 text-4xl">
+                          🏆
+                        </div>
+                      )}
+                      <div className="mt-2 text-sm font-semibold text-white">{trophyCardTitle(award)}</div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        {award.tournamentName} · x{award.valueInt}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </SectionCard>
           </div>
         ) : null}
@@ -668,7 +831,9 @@ export function PublicPlayerProfileLayout({
         {activeTab === "news" ? (
           <div className="space-y-5">
             <SectionCard title="News">
-              <div className="text-sm text-slate-300">Not provided in MVP data.</div>
+              <div className="text-sm text-slate-300">
+                No news records available in database for this player.
+              </div>
             </SectionCard>
           </div>
         ) : null}

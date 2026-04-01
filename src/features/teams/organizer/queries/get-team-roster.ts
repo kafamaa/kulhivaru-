@@ -4,6 +4,7 @@ export interface TeamRosterPlayer {
   id: string;
   name: string;
   position: string | null;
+  jerseyNumber: string | null;
   imageUrl: string | null;
   nickname: string | null;
   dob: string | null;
@@ -31,7 +32,7 @@ export async function getTeamRoster(teamId: string): Promise<TeamRosterData | nu
 
   const { data: players } = await supabase
     .from("players")
-    .select("id, name, position, image_url, nickname, dob, id_number")
+    .select("id, name, position, jersey_number, image_url, nickname, dob, id_number")
     .eq("team_id", teamId)
     .order("name");
 
@@ -44,6 +45,7 @@ export async function getTeamRoster(teamId: string): Promise<TeamRosterData | nu
       id: String(p.id),
       name: String(p.name),
       position: (p.position as string) ?? null,
+      jerseyNumber: (p.jersey_number as string | null) ?? null,
       imageUrl: (p.image_url as string) ?? null,
       nickname: (p.nickname as string | null) ?? null,
       dob: (p.dob as string | null) ?? null,
