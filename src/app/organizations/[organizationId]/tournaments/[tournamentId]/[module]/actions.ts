@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
-const MODULES = ['registration','teams','players','groups-stages','fixtures','matches','live-control','standings','statistics','awards','officials','venues','news','sponsors','reports'] as const
+const MODULES = ['registration','teams','players','groups-stages','draw','fixtures','matches','live-control','standings','statistics','qualification','discipline','awards','officials','venues','finance','tasks-readiness','documents','news','sponsors','staff-permissions','activity-audit','reports','completion-archive'] as const
 const STATUSES = ['draft','active','pending','approved','scheduled','live','completed','cancelled','archived'] as const
 
 function value(fd: FormData, key: string) { return String(fd.get(key) ?? '').trim() }
@@ -43,7 +43,7 @@ export async function updateModuleRecordAction(formData: FormData) {
   const { supabase }=await authorize(organizationId,tournamentId)
   const { error }=await supabase.from('tournament_module_records').update({title,subtitle:subtitle||null,status,scheduled_at:scheduledAt?new Date(scheduledAt).toISOString():null,updated_at:new Date().toISOString()}).eq('id',id).eq('tournament_id',tournamentId).eq('module',module)
   if(error){console.error('Update module record failed',error);redirect(`${base}?error=save`)}
-  revalidatePath(base);redirect(`${base}?saved=1`)
+  revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?saved=1`)
 }
 
 export async function deleteModuleRecordAction(formData: FormData) {
@@ -53,5 +53,5 @@ export async function deleteModuleRecordAction(formData: FormData) {
   const { supabase }=await authorize(organizationId,tournamentId)
   const { error }=await supabase.from('tournament_module_records').delete().eq('id',id).eq('tournament_id',tournamentId).eq('module',module)
   if(error){console.error('Delete module record failed',error);redirect(`${base}?error=save`)}
-  revalidatePath(base);redirect(`${base}?deleted=1`)
+  revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?deleted=1`)
 }
