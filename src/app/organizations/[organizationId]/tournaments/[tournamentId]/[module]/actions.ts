@@ -6,66 +6,12 @@ import { createClient } from '@/lib/supabase/server'
 
 const MODULES = ['registration','teams','players','groups-stages','draw','fixtures','matches','live-control','standings','statistics','qualification','discipline','awards','officials','venues','finance','tasks-readiness','documents','news','sponsors','staff-permissions','activity-audit','reports','completion-archive'] as const
 const STATUSES = ['draft','active','pending','approved','scheduled','live','completed','cancelled','archived'] as const
-
-function value(fd: FormData, key: string) { return String(fd.get(key) ?? '').trim() }
-function safeModule(module: string) { return MODULES.includes(module as (typeof MODULES)[number]) }
-function payload(fd: FormData) {
-  return {
-    details: value(fd,'details') || null,
-    reference: value(fd,'reference') || null,
-    score: value(fd,'score') || null,
-    notes: value(fd,'notes') || null,
-  }
-}
-
-async function authorize(organizationId: string, tournamentId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-  const { data: membership } = await supabase.from('organization_members').select('role').eq('organization_id', organizationId).eq('user_id', user.id).eq('status','active').maybeSingle()
-  if (!membership || !['owner','admin','manager'].includes(membership.role)) redirect(`/organizations/${organizationId}/tournaments/${tournamentId}`)
-  const { data: tournament } = await supabase.from('tournaments').select('id').eq('id',tournamentId).eq('organization_id',organizationId).maybeSingle()
-  if (!tournament) redirect(`/organizations/${organizationId}/tournaments`)
-  return { supabase, user }
-}
-
-function validate(base:string,title:string,status:string){
-  if(!title || title.length>180 || !STATUSES.includes(status as (typeof STATUSES)[number])) redirect(`${base}?error=invalid`)
-}
-
-export async function createModuleRecordAction(formData: FormData) {
-  const organizationId=value(formData,'organization_id'), tournamentId=value(formData,'tournament_id'), module=value(formData,'module')
-  if(!organizationId||!tournamentId||!safeModule(module)) redirect('/dashboard')
-  const base=`/organizations/${organizationId}/tournaments/${tournamentId}/${module}`
-  const title=value(formData,'title'), subtitle=value(formData,'subtitle'), status=value(formData,'status')||'active', scheduledAt=value(formData,'scheduled_at')
-  validate(base,title,status)
-  const {supabase,user}=await authorize(organizationId,tournamentId)
-  const {error}=await supabase.from('tournament_module_records').insert({tournament_id:tournamentId,module,title,subtitle:subtitle||null,status,scheduled_at:scheduledAt?new Date(scheduledAt).toISOString():null,data:payload(formData),created_by:user.id})
-  if(error){console.error('Create module record failed',error);redirect(`${base}?error=save`)}
-  await supabase.from('audit_logs').insert({organization_id:organizationId,user_id:user.id,action:'module_record.created',entity_type:module,entity_id:tournamentId,metadata:{title}})
-  revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?saved=1`)
-}
-
-export async function updateModuleRecordAction(formData: FormData) {
-  const organizationId=value(formData,'organization_id'),tournamentId=value(formData,'tournament_id'),module=value(formData,'module'),id=value(formData,'id')
-  if(!organizationId||!tournamentId||!id||!safeModule(module)) redirect('/dashboard')
-  const base=`/organizations/${organizationId}/tournaments/${tournamentId}/${module}`
-  const title=value(formData,'title'),subtitle=value(formData,'subtitle'),status=value(formData,'status'),scheduledAt=value(formData,'scheduled_at')
-  validate(base,title,status)
-  const {supabase,user}=await authorize(organizationId,tournamentId)
-  const {error}=await supabase.from('tournament_module_records').update({title,subtitle:subtitle||null,status,scheduled_at:scheduledAt?new Date(scheduledAt).toISOString():null,data:payload(formData),updated_at:new Date().toISOString()}).eq('id',id).eq('tournament_id',tournamentId).eq('module',module)
-  if(error){console.error('Update module record failed',error);redirect(`${base}?error=save`)}
-  await supabase.from('audit_logs').insert({organization_id:organizationId,user_id:user.id,action:'module_record.updated',entity_type:module,entity_id:id,metadata:{title,status}})
-  revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?saved=1`)
-}
-
-export async function deleteModuleRecordAction(formData: FormData) {
-  const organizationId=value(formData,'organization_id'),tournamentId=value(formData,'tournament_id'),module=value(formData,'module'),id=value(formData,'id')
-  if(!organizationId||!tournamentId||!id||!safeModule(module)) redirect('/dashboard')
-  const base=`/organizations/${organizationId}/tournaments/${tournamentId}/${module}`
-  const {supabase,user}=await authorize(organizationId,tournamentId)
-  const {error}=await supabase.from('tournament_module_records').delete().eq('id',id).eq('tournament_id',tournamentId).eq('module',module)
-  if(error){console.error('Delete module record failed',error);redirect(`${base}?error=save`)}
-  await supabase.from('audit_logs').insert({organization_id:organizationId,user_id:user.id,action:'module_record.deleted',entity_type:module,entity_id:id,metadata:{}})
-  revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?deleted=1`)
-}
+function value(fd:FormData,key:string){return String(fd.get(key)??'').trim()}
+function safeModule(module:string){return MODULES.includes(module as (typeof MODULES)[number])}
+function payload(fd:FormData){return{details:value(fd,'details')||null,reference:value(fd,'reference')||null,score:value(fd,'score')||null,notes:value(fd,'notes')||null}}
+async function authorize(organizationId:string,tournamentId:string){const supabase=await createClient();const{data:{user}}=await supabase.auth.getUser();if(!user)redirect('/login');const{data:membership}=await supabase.from('organization_members').select('role').eq('organization_id',organizationId).eq('user_id',user.id).eq('status','active').maybeSingle();if(!membership||!['owner','admin','manager'].includes(membership.role))redirect(`/organizations/${organizationId}/tournaments/${tournamentId}`);const{data:tournament}=await supabase.from('tournaments').select('id').eq('id',tournamentId).eq('organization_id',organizationId).maybeSingle();if(!tournament)redirect(`/organizations/${organizationId}/tournaments`);return{supabase,user}}
+function validate(base:string,title:string,status:string){if(!title||title.length>180||!STATUSES.includes(status as (typeof STATUSES)[number]))redirect(`${base}?error=invalid`)}
+async function audit(supabase:Awaited<ReturnType<typeof createClient>>,organizationId:string,userId:string,action:string,module:string,entityId:string,metadata:Record<string,unknown>){const{error}=await supabase.from('audit_logs').insert({organization_id:organizationId,actor_user_id:userId,action,entity_type:module,entity_id:entityId,metadata});if(error)console.error('Audit log failed',error)}
+export async function createModuleRecordAction(formData:FormData){const organizationId=value(formData,'organization_id'),tournamentId=value(formData,'tournament_id'),module=value(formData,'module');if(!organizationId||!tournamentId||!safeModule(module))redirect('/dashboard');const base=`/organizations/${organizationId}/tournaments/${tournamentId}/${module}`;const title=value(formData,'title'),subtitle=value(formData,'subtitle'),status=value(formData,'status')||'active',scheduledAt=value(formData,'scheduled_at');validate(base,title,status);const{supabase,user}=await authorize(organizationId,tournamentId);const{data:created,error}=await supabase.from('tournament_module_records').insert({tournament_id:tournamentId,module,title,subtitle:subtitle||null,status,scheduled_at:scheduledAt?new Date(scheduledAt).toISOString():null,data:payload(formData),created_by:user.id}).select('id').single();if(error||!created){console.error('Create module record failed',error);redirect(`${base}?error=save`)}await audit(supabase,organizationId,user.id,'module_record.created',module,created.id,{title});revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?saved=1`)}
+export async function updateModuleRecordAction(formData:FormData){const organizationId=value(formData,'organization_id'),tournamentId=value(formData,'tournament_id'),module=value(formData,'module'),id=value(formData,'id');if(!organizationId||!tournamentId||!id||!safeModule(module))redirect('/dashboard');const base=`/organizations/${organizationId}/tournaments/${tournamentId}/${module}`;const title=value(formData,'title'),subtitle=value(formData,'subtitle'),status=value(formData,'status'),scheduledAt=value(formData,'scheduled_at');validate(base,title,status);const{supabase,user}=await authorize(organizationId,tournamentId);const{error}=await supabase.from('tournament_module_records').update({title,subtitle:subtitle||null,status,scheduled_at:scheduledAt?new Date(scheduledAt).toISOString():null,data:payload(formData),updated_at:new Date().toISOString()}).eq('id',id).eq('tournament_id',tournamentId).eq('module',module);if(error){console.error('Update module record failed',error);redirect(`${base}?error=save`)}await audit(supabase,organizationId,user.id,'module_record.updated',module,id,{title,status});revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?saved=1`)}
+export async function deleteModuleRecordAction(formData:FormData){const organizationId=value(formData,'organization_id'),tournamentId=value(formData,'tournament_id'),module=value(formData,'module'),id=value(formData,'id');if(!organizationId||!tournamentId||!id||!safeModule(module))redirect('/dashboard');const base=`/organizations/${organizationId}/tournaments/${tournamentId}/${module}`;const{supabase,user}=await authorize(organizationId,tournamentId);const{error}=await supabase.from('tournament_module_records').delete().eq('id',id).eq('tournament_id',tournamentId).eq('module',module);if(error){console.error('Delete module record failed',error);redirect(`${base}?error=save`)}await audit(supabase,organizationId,user.id,'module_record.deleted',module,id,{});revalidatePath(base);revalidatePath(`/organizations/${organizationId}/tournaments/${tournamentId}`);redirect(`${base}?deleted=1`)}
