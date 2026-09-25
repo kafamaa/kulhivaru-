@@ -1,7 +1,14 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        'refactored-robot-5g9rrq7jxv9vh79g4-3000.app.github.dev',
+        'localhost:3000',
+      ],
+    },
+  },
+}
 
-export default nextConfig;
+export default nextConfig
