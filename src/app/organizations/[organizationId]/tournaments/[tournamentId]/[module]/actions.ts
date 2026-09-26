@@ -4,11 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
-const MODULES = ['registration','teams','players','groups-stages','draw','fixtures','matches','live-control','standings','statistics','qualification','discipline','awards','officials','venues','finance','tasks-readiness','documents','news','sponsors','staff-permissions','activity-audit','reports','completion-archive'] as const
+const MODULES = ['registration','teams','players','groups-stages','fixtures','matches','live-control','standings','statistics','discipline','transfers','protests-appeals','awards','officials','venues','communications','news','media','sponsors','finance','documents','reports','staff-permissions','notifications','integrations','activity-audit','archive-delete'] as const
 const STATUSES = ['draft','active','pending','approved','scheduled','live','completed','cancelled','archived'] as const
-function value(fd:FormData,key:string){return String(fd.get(key)??'').trim()}
-function safeModule(module:string){return MODULES.includes(module as (typeof MODULES)[number])}
-function payload(fd:FormData){return{details:value(fd,'details')||null,reference:value(fd,'reference')||null,score:value(fd,'score')||null,notes:value(fd,'notes')||null}}
+const value=(fd:FormData,key:string)=>String(fd.get(key)??'').trim()
+const safeModule=(module:string)=>MODULES.includes(module as (typeof MODULES)[number])
+const payload=(fd:FormData)=>({details:value(fd,'details')||null,reference:value(fd,'reference')||null,score:value(fd,'score')||null,notes:value(fd,'notes')||null})
 async function authorize(organizationId:string,tournamentId:string){const supabase=await createClient();const{data:{user}}=await supabase.auth.getUser();if(!user)redirect('/login');const{data:membership}=await supabase.from('organization_members').select('role').eq('organization_id',organizationId).eq('user_id',user.id).eq('status','active').maybeSingle();if(!membership||!['owner','admin','manager'].includes(membership.role))redirect(`/organizations/${organizationId}/tournaments/${tournamentId}`);const{data:tournament}=await supabase.from('tournaments').select('id').eq('id',tournamentId).eq('organization_id',organizationId).maybeSingle();if(!tournament)redirect(`/organizations/${organizationId}/tournaments`);return{supabase,user}}
 function validate(base:string,title:string,status:string){if(!title||title.length>180||!STATUSES.includes(status as (typeof STATUSES)[number]))redirect(`${base}?error=invalid`)}
 async function audit(supabase:Awaited<ReturnType<typeof createClient>>,organizationId:string,userId:string,action:string,module:string,entityId:string,metadata:Record<string,unknown>){const{error}=await supabase.from('audit_logs').insert({organization_id:organizationId,actor_user_id:userId,action,entity_type:module,entity_id:entityId,metadata});if(error)console.error('Audit log failed',error)}
