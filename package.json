@@ -1,29 +1,38 @@
 {
-  "name": "kulhivaru-",
-  "version": "0.1.0",
+  "name": "kulhivaru-plus",
   "private": true,
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "next dev --webpack",
-    "dev:turbo": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:sql": "node scripts/validate-engine-sql.mjs",
+    "typecheck:functions": "tsc -p tsconfig.functions.json",
+    "audit:a11y": "node scripts/accessibility-audit.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.117.1",
-    "next": "16.3.5",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "@supabase/supabase-js": "^2.117.3",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.5"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.5",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "@electric-sql/pglite": "^0.5.10",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^5.0.4"
   }
 }
